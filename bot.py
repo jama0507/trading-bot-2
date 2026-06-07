@@ -22,11 +22,12 @@ def run_server():
     server.serve_forever()
 
 async def get_btc_data():
+async def get_btc_data():
     async with aiohttp.ClientSession() as s:
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=30&interval=daily"
+        url = "https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=60"
         async with s.get(url) as r:
             data = await r.json()
-    prices = [p[1] for p in data["prices"]]
+    prices = [p["close"] for p in data["Data"]["Data"]]
     return prices
 
 async def get_gold_data():
