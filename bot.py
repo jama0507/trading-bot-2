@@ -23,10 +23,10 @@ def run_server():
 
 async def get_btc_data():
     async with aiohttp.ClientSession() as s:
-        url = "https://min-api.cryptocompare.com/data/v2/histoday?fsym=BTC&tsym=USD&limit=60"
+        url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=61"
         async with s.get(url) as r:
             data = await r.json()
-    prices = [p["close"] for p in data["Data"]["Data"]]
+    prices = [float(p[4]) for p in data]
     return prices
 
 async def get_gold_data():
@@ -110,26 +110,22 @@ def generate_signal(rsi, macd, macd_signal, sma20, sma50):
 
 def calculate_levels(price, verdict):
     if verdict == "BUY":
-        entry = price
-        stop_loss = round(price * 0.98, 2)
-        take_profit1 = round(price * 1.04, 2)
-        take_profit2 = round(price * 1.08, 2)
-        take_profit3 = round(price * 1.12, 2)
+        return {
+            "entry": price,
+            "stop_loss": round(price * 0.98, 2),
+            "tp1": round(price * 1.04, 2),
+            "tp2": round(price * 1.08, 2),
+            "tp3": round(price * 1.12, 2),
+        }
     elif verdict == "SELL":
-        entry = price
-        stop_loss = round(price * 1.02, 2)
-        take_profit1 = round(price * 0.96, 2)
-        take_profit2 = round(price * 0.92, 2)
-        take_profit3 = round(price * 0.88, 2)
-    else:
-        return None
-    return {
-        "entry": entry,
-        "stop_loss": stop_loss,
-        "tp1": take_profit1,
-        "tp2": take_profit2,
-        "tp3": take_profit3,
-    }
+        return {
+            "entry": price,
+            "stop_loss": round(price * 1.02, 2),
+            "tp1": round(price * 0.96, 2),
+            "tp2": round(price * 0.92, 2),
+            "tp3": round(price * 0.88, 2),
+        }
+    return None
 
 def fmt(n, d=2):
     return f"{n:,.{d}f}" if n else "N/A"
@@ -165,20 +161,18 @@ async def btc_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         rsi = calculate_rsi(prices)
         macd, macd_sig = calculate_macd(prices)
         sma20 = calculate_sma(prices, 20)
-        sma50 = calculate_sma(prices, 50) if len(prices) >= 50 else None
+        sma50 = calculate_sma(prices, 50)
         chg1d = round(((prices[-1] - prices[-2]) / prices[-2]) * 100, 2)
         chg7d = round(((prices[-1] - prices[-8]) / prices[-8]) * 100, 2)
         verdict, signals = generate_signal(rsi, macd, macd_sig, sma20, sma50)
         levels = calculate_levels(price, verdict)
         trend = "📈" if chg1d > 0 else "📉"
-
         if verdict == "BUY":
             verdict_line = "✅ SIGNAL: BUY"
         elif verdict == "SELL":
             verdict_line = "🚨 SIGNAL: SELL"
         else:
             verdict_line = "⏳ SIGNAL: HOLD"
-
         text = (
             f"₿ *Bitcoin (BTC/USD)*\n"
             f"━━━━━━━━━━━━━━━━━━\n"
@@ -192,7 +186,6 @@ async def btc_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"SMA50: `${fmt(sma50)}`\n\n"
             f"🔍 *Signals*\n" + "\n".join(signals) + f"\n\n*{verdict_line}*\n"
         )
-
         if levels:
             text += (
                 f"\n💼 *Trade Setup*\n"
@@ -205,9 +198,7 @@ async def btc_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
         else:
             text += f"\n⏳ *Нет чёткого сигнала для входа*\n"
-
         text += f"\n_Updated: {datetime.now().strftime('%H:%M:%S')}_"
-
     except Exception as e:
         text = f"❌ Ошибка BTC:\n`{e}`"
     await q.edit_message_text(text, parse_mode="Markdown",
@@ -257,7 +248,7 @@ async def both_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         rsi = calculate_rsi(prices)
         macd, macd_sig = calculate_macd(prices)
         sma20 = calculate_sma(prices, 20)
-        sma50 = calculate_sma(prices, 50) if len(prices) >= 50 else None
+        sma50 = calculate_sma(prices, 50)
         verdict, _ = generate_signal(rsi, macd, macd_sig, sma20, sma50)
         levels = calculate_levels(btc_price, verdict)
         trend = "📈" if btc_chg > 0 else "📉"
@@ -269,9 +260,7 @@ async def both_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             verdict_line = "⏳ HOLD"
     except Exception:
         btc_price, btc_chg, rsi, verdict_line, trend, levels = None, 0, None, "N/A", "❓", None
-
     gold_price = await get_gold_data()
-
     text = (
         f"📊 *Markets Overview*\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
@@ -280,7 +269,6 @@ async def both_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"RSI: `{rsi}`\n"
         f"Signal: *{verdict_line}*\n"
     )
-
     if levels:
         text += (
             f"🎯 Entry: `${fmt(levels['entry'])}`\n"
@@ -289,13 +277,11 @@ async def both_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     else:
         text += "\n"
-
     text += (
         f"🥇 *XAU/USD (Gold)*\n"
         f"Price: `${fmt(gold_price)}/oz`\n\n"
         f"_Updated: {datetime.now().strftime('%H:%M:%S')}_"
     )
-
     await q.edit_message_text(text, parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🔄 Refresh", callback_data="both"),
@@ -307,7 +293,7 @@ async def help_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     text = (
         "ℹ️ *Как работает бот*\n\n"
-        "• BTC: CryptoCompare API\n"
+        "• BTC: Binance API\n"
         "• Gold: GoldPrice API\n"
         "• RSI, MACD, SMA20/50\n\n"
         "*Trade Setup:*\n"
